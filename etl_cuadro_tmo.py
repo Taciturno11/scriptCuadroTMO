@@ -206,33 +206,12 @@ def insertar_datos(df, cola):
     with conectar_sql() as cnx:
         cur = cnx.cursor()
         
-        # Verificar duplicados antes de insertar - COMPARANDO TODAS LAS COLUMNAS
-        # Usando una comparación más simple y directa
+        # Verificar duplicados usando solo la CLAVE PRIMARIA (time, cName, cReportGroup)
+        # Esto es más eficiente y evita el problema de parámetros
         verificar_duplicado = f"""
         SELECT COUNT(*) 
         FROM {SQL_TABLE} 
-        WHERE time = ? AND cName = ? AND cReportGroup = ? 
-        AND (Recibidas = ? OR (Recibidas IS NULL AND ? IS NULL))
-        AND (Respondidas = ? OR (Respondidas IS NULL AND ? IS NULL))
-        AND (Abandonadas = ? OR (Abandonadas IS NULL AND ? IS NULL))
-        AND ([Abandonadas 5s] = ? OR ([Abandonadas 5s] IS NULL AND ? IS NULL))
-        AND ([TMO s tHablado/int] = ? OR ([TMO s tHablado/int] IS NULL AND ? IS NULL))
-        AND ([% Hold] = ? OR ([% Hold] IS NULL AND ? IS NULL))
-        AND ([TME Respondida] = ? OR ([TME Respondida] IS NULL AND ? IS NULL))
-        AND ([TME Abandonada] = ? OR ([TME Abandonada] IS NULL AND ? IS NULL))
-        AND ([Tiempo Disponible H] = ? OR ([Tiempo Disponible H] IS NULL AND ? IS NULL))
-        AND ([Tiempo Hablado  H] = ? OR ([Tiempo Hablado  H] IS NULL AND ? IS NULL))
-        AND ([Tiempo Recarga  H] = ? OR ([Tiempo Recarga  H] IS NULL AND ? IS NULL))
-        AND ([Tiempo ACW  H] = ? OR ([Tiempo ACW  H] IS NULL AND ? IS NULL))
-        AND ([Tiempo No Disponible  H] = ? OR ([Tiempo No Disponible  H] IS NULL AND ? IS NULL))
-        AND ([Tiempo Total LoggedIn] = ? OR ([Tiempo Total LoggedIn] IS NULL AND ? IS NULL))
-        AND ([Hora ACD] = ? OR ([Hora ACD] IS NULL AND ? IS NULL))
-        AND ([% Disponible] = ? OR ([% Disponible] IS NULL AND ? IS NULL))
-        AND ([% Hablado] = ? OR ([% Hablado] IS NULL AND ? IS NULL))
-        AND ([% Recarga] = ? OR ([% Recarga] IS NULL AND ? IS NULL))
-        AND ([Int  Salientes manuales] = ? OR ([Int  Salientes manuales] IS NULL AND ? IS NULL))
-        AND ([Tiempo en int  salientes manuales (H)] = ? OR ([Tiempo en int  salientes manuales (H)] IS NULL AND ? IS NULL))
-        AND ([TMO s Int  Salientes manuales] = ? OR ([TMO s Int  Salientes manuales] IS NULL AND ? IS NULL))
+        WHERE time = ? AND cName = ? AND cReportGroup = ?
         """
         
         insert = f"""
@@ -258,22 +237,11 @@ def insertar_datos(df, cola):
                     else:
                         row_values.append(value)
                 
-                # Verificar si ya existe un registro IDÉNTICO en TODAS las columnas
-                # Excluir fechaCarga (último elemento) y crear lista de valores para comparación
-                valores_comparacion = row_values[:-1]  # Excluir fechaCarga
+                # Verificar si ya existe un registro con la misma CLAVE PRIMARIA
+                # Solo necesitamos los primeros 3 valores: time, cName, cReportGroup
+                valores_clave = row_values[:3]  # time, cName, cReportGroup
                 
-                # Crear la lista de parámetros para la consulta de verificación
-                # La consulta espera exactamente 45 parámetros:
-                # - 3 para time, cName, cReportGroup
-                # - 21 columnas * 2 parámetros cada una = 42 parámetros
-                parametros_verificacion = []
-                parametros_verificacion.extend(valores_comparacion[:3])  # time, cName, cReportGroup
-                
-                # Para cada valor restante, agregarlo 2 veces (para la comparación OR)
-                for valor in valores_comparacion[3:]:
-                    parametros_verificacion.extend([valor, valor])
-                
-                cur.execute(verificar_duplicado, parametros_verificacion)
+                cur.execute(verificar_duplicado, valores_clave)
                 existe = cur.fetchone()[0] > 0
                 
                 if existe:
